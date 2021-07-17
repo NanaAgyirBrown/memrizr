@@ -2,12 +2,15 @@ package handlerTest
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nanaagyirbrown/memrizr/handler"
 	"github.com/nanaagyirbrown/memrizr/handler/model"
 	"github.com/nanaagyirbrown/memrizr/handler/model/apperrors"
 	"github.com/nanaagyirbrown/memrizr/mocks"
+	"github.com/nanaagyirbrown/memrizr/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"net/http"
@@ -16,6 +19,67 @@ import (
 )
 
 func TestSignup(t *testing.T){
+	t.Run("Success", func(t *testing.T) {
+		uid, _ := uuid.NewRandom()
+
+		mockUser := &model.User{
+			Email:    "bob@bob.com",
+			Password: "howdyhoneighbor!",
+		}
+
+		mockUserRepository := new(mocks.MockUserRepository)
+		us := service.NewUserService(&service.USConfig{
+			UserRepository: mockUserRepository,
+		})
+
+		// We can use Run method to modify the user when the Create method is called.
+		// We can then chain on a Return method to return no error
+		mockUserRepository.
+			On("Create", mock.AnythingOfType("*context.emptyCtx"), mockUser).
+			Run(func(args mock.Arguments) {
+				userArg := args.Get(1).(*model.User) // arg 0 is context, arg 1 is *User
+				userArg.UID = uid
+			}).Return(nil)
+
+		ctx := context.TODO()
+		err := us.Signup(ctx, mockUser)
+
+		assert.NoError(t, err)
+
+		// assert user now has a userID
+		assert.Equal(t, uid, mockUser.UID)
+
+		mockUserRepository.AssertExpectations(t)
+	})
+
+	t.Run("Error", func(t *testing.T) {
+		mockUser := &model.User{
+			Email:    "bob@bob.com",
+			Password: "howdyhoneighbor!",
+		}
+
+		mockUserRepository := new(mocks.MockUserRepository)
+		us := service.NewUserService(&service.USConfig{
+			UserRepository: mockUserRepository,
+		})
+
+		mockErr := apperrors.NewConflict("email", mockUser.Email)
+
+		// We can use Run method to modify the user when the Create method is called.
+		//  We can then chain on a Return method to return no error
+		mockUserRepository.
+			On("Create", mock.AnythingOfType("*context.emptyCtx"), mockUser).
+			Return(mockErr)
+
+		ctx := context.TODO()
+		err := us.Signup(ctx, mockUser)
+
+		// assert error is error we response with in mock
+		assert.EqualError(t, err, mockErr.Error())
+
+		mockUserRepository.AssertExpectations(t)
+	})
+
 	t.Run("Email and Password Required", func(t *testing.T) {
 		// We want this to show that it's not called in this case
 		mockUserService := new(mocks.MockUserService)
