@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"github.com/jmoiron/sqlx"
 	"log"
 	"os"
@@ -9,6 +11,7 @@ import (
 
 type dataSources struct{
 	DB *sqlx.DB
+	RedisClient *redis.Client
 }
 
 // InitDS establishes connections to fields in dataSources
@@ -38,8 +41,27 @@ func initDS() (*dataSources, error){
 		return nil, fmt.Errorf("error connecting to db: %w", err)
 	}
 
+	// Initialize redis connection
+	redisHost := os.Getenv("REDIS_HOST")
+	redisPort := os.Getenv("REDIS_PORT")
+
+	log.Printf("Connecting to Redis\n")
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Password: "",
+		DB:       0,
+	})
+
+	// verify redis connection
+	_, err = rdb.Ping(context.Background()).Result()
+
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to redis: %w", err)
+	}
+
 	return &dataSources{
 		DB: db,
+		RedisClient: rdb,
 	}, nil
 }
 
@@ -47,6 +69,10 @@ func initDS() (*dataSources, error){
 func (d *dataSources) close() error {
 	if err := d.DB.Close(); err != nil {
 		return fmt.Errorf("error closing Postgresql: %w", err)
+	}
+
+	if err := d.RedisClient.Close(); err != nil{
+		return fmt.Errorf("error closing Redis client: %w", err)
 	}
 
 	return nil

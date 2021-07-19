@@ -31,9 +31,9 @@ type RefreshTokenCustomClaims struct {
 	jwt.StandardClaims
 }
 
-func generateIDToken(u *model.User, key *rsa.PrivateKey) (string, error){
+func generateIDToken(u *model.User, key *rsa.PrivateKey,exp int64) (string, error){
 	unixTime := time.Now().Unix()
-	tokenExp := unixTime + 60*15 // 15 minutes from current time
+	tokenExp := unixTime + exp // 15 minutes from current time
 
 	claims := IDTokenCustomClaims{
 		User: u,
@@ -56,9 +56,10 @@ func generateIDToken(u *model.User, key *rsa.PrivateKey) (string, error){
 
 // generateRefreshToken creates a refresh token
 // The refresh token stores only the user's ID, a string
-func generateRefreshToken(uid uuid.UUID, key string) (*RefreshToken, error) {
+func generateRefreshToken(uid uuid.UUID, key string,exp int64) (*RefreshToken, error) {
 	currentTime := time.Now()
-	tokenExp := currentTime.AddDate(0, 0, 3) // 3 days
+	//tokenExp := currentTime.AddDate(0, 0, 3) // 3 days
+	tokenExp := currentTime.Add(time.Duration(exp) * time.Second)
 	tokenID, err := uuid.NewRandom()         // v4 uuid in the google uuid lib
 
 	if err != nil {

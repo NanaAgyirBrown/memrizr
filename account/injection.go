@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 )
 
 // your imports here
@@ -27,7 +28,7 @@ func inject(d *dataSources) (*gin.Engine, error) {
 	 * repository layer
 	 */
 	userRepository := repository.NewUserRepository(d.DB)
-
+	tokenRepository := repository.NewTokenRepository(d.RedisClient)
 	/*
 	 * repository layer
 	 */
@@ -65,10 +66,27 @@ func inject(d *dataSources) (*gin.Engine, error) {
 	// load refresh token secret from env variable
 	refreshSecret := os.Getenv("REFRESH_SECRET")
 
+	// load expiration lengths from env variables and parse as int
+	idTokenExp := os.Getenv("ID_TOKEN_EXP")
+	refreshTokenExp := os.Getenv("REFRESH_TOKEN_EXP")
+
+	idExp, err := strconv.ParseInt(idTokenExp, 0, 64)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse ID_TOKEN_EXP as int: %w", err)
+	}
+
+	refreshExp, err := strconv.ParseInt(refreshTokenExp, 0, 64)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse REFRESH_TOKEN_EXP as int: %w", err)
+	}
+
 	tokenService := service.NewTokenService(&service.TSConfig{
+		TokenRepository: tokenRepository,
 		PrivKey:       privKey,
 		PubKey:        pubKey,
 		RefreshSecret: refreshSecret,
+		IDExpirationSecs: idExp,
+		RefreshExpirationSecs: refreshExp,
 	})
 
 	// initialize gin.Engine
@@ -78,6 +96,7 @@ func inject(d *dataSources) (*gin.Engine, error) {
 		R:            router,
 		UserService:  userService,
 		TokenService: tokenService,
+		BaseURL: os.Getenv("ACCOUNT_API_URL"),
 	})
 
 	return router, nil
