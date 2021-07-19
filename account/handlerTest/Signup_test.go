@@ -2,12 +2,15 @@ package handlerTest
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nanaagyirbrown/memrizr/handler"
 	"github.com/nanaagyirbrown/memrizr/handler/model"
 	"github.com/nanaagyirbrown/memrizr/handler/model/apperrors"
 	"github.com/nanaagyirbrown/memrizr/mocks"
+	"github.com/nanaagyirbrown/memrizr/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"net/http"
@@ -16,10 +19,71 @@ import (
 )
 
 func TestSignup(t *testing.T){
+	t.Run("Success", func(t *testing.T) {
+		uid, _ := uuid.NewRandom()
+
+		mockUser := &model.User{
+			Email:    "bob@bob.com",
+			Password: "howdyhoneighbor!",
+		}
+
+		mockUserRepository := new(mocks.MockUserRepository)
+		us := service.NewUserService(&service.USConfig{
+			UserRepository: mockUserRepository,
+		})
+
+		// We can use Run method to modify the user when the Create method is called.
+		// We can then chain on a Return method to return no error
+		mockUserRepository.
+			On("Create", mock.AnythingOfType("*context.emptyCtx"), mockUser).
+			Run(func(args mock.Arguments) {
+				userArg := args.Get(1).(*model.User) // arg 0 is context, arg 1 is *User
+				userArg.UID = uid
+			}).Return(nil)
+
+		ctx := context.TODO()
+		err := us.Signup(ctx, mockUser)
+
+		assert.NoError(t, err)
+
+		// assert user now has a userID
+		assert.Equal(t, uid, mockUser.UID)
+
+		mockUserRepository.AssertExpectations(t)
+	})
+
+	t.Run("Error", func(t *testing.T) {
+		mockUser := &model.User{
+			Email:    "bob@bob.com",
+			Password: "howdyhoneighbor!",
+		}
+
+		mockUserRepository := new(mocks.MockUserRepository)
+		us := service.NewUserService(&service.USConfig{
+			UserRepository: mockUserRepository,
+		})
+
+		mockErr := apperrors.NewConflict("email", mockUser.Email)
+
+		// We can use Run method to modify the user when the Create method is called.
+		//  We can then chain on a Return method to return no error
+		mockUserRepository.
+			On("Create", mock.AnythingOfType("*context.emptyCtx"), mockUser).
+			Return(mockErr)
+
+		ctx := context.TODO()
+		err := us.Signup(ctx, mockUser)
+
+		// assert error is error we response with in mock
+		assert.EqualError(t, err, mockErr.Error())
+
+		mockUserRepository.AssertExpectations(t)
+	})
+
 	t.Run("Email and Password Required", func(t *testing.T) {
 		// We want this to show that it's not called in this case
 		mockUserService := new(mocks.MockUserService)
-		mockUserService.On("Signup", mock.AnythingOfType("*gin.Context"), mock.AnythingOfType("*model.User")).Return(nil)
+		mockUserService.On("Signup", mock.AnythingOfType("*context.emptyCtx"), mock.AnythingOfType("*model.User")).Return(nil)
 
 		// a response recorder for getting written http response
 		respRecorder := httptest.NewRecorder()
@@ -53,7 +117,7 @@ func TestSignup(t *testing.T){
 	t.Run("Invalid email", func(t *testing.T) {
 		// We want this to show that it's not called in this case
 		mockUserService := new(mocks.MockUserService)
-		mockUserService.On("Signup", mock.AnythingOfType("*gin.Context"), mock.AnythingOfType("*model.User")).Return(nil)
+		mockUserService.On("Signup", mock.AnythingOfType("*context.emptyCtx"), mock.AnythingOfType("*model.User")).Return(nil)
 
 		// a response recorder for getting written http response
 		respRecorder := httptest.NewRecorder()
@@ -88,7 +152,7 @@ func TestSignup(t *testing.T){
 	t.Run("Password too short", func(t *testing.T) {
 		// We want this to show that it's not called in this case
 		mockUserService := new(mocks.MockUserService)
-		mockUserService.On("Signup", mock.AnythingOfType("*gin.Context"), mock.AnythingOfType("*model.User")).Return(nil)
+		mockUserService.On("Signup", mock.AnythingOfType("*context.emptyCtx"), mock.AnythingOfType("*model.User")).Return(nil)
 
 		// a response recorder for getting written http response
 		respRecorder := httptest.NewRecorder()
@@ -123,7 +187,7 @@ func TestSignup(t *testing.T){
 	t.Run("Password too long", func(t *testing.T) {
 		// We want this to show that it's not called in this case
 		mockUserService := new(mocks.MockUserService)
-		mockUserService.On("Signup", mock.AnythingOfType("*gin.Context"), mock.AnythingOfType("*model.User")).Return(nil)
+		mockUserService.On("Signup", mock.AnythingOfType("*context.emptyCtx"), mock.AnythingOfType("*model.User")).Return(nil)
 
 		// a response recorder for getting written http response
 		respRecorder := httptest.NewRecorder()
@@ -162,7 +226,7 @@ func TestSignup(t *testing.T){
 		}
 
 		mockUserService := new(mocks.MockUserService)
-		mockUserService.On("Signup", mock.AnythingOfType("*gin.Context"), u).Return(apperrors.NewConflict("User Already Exists", u.Email))
+		mockUserService.On("Signup", mock.AnythingOfType("*context.emptyCtx"), u).Return(apperrors.NewConflict("User Already Exists", u.Email))
 
 		// a response recorder for getting written http response
 		rr := httptest.NewRecorder()
@@ -209,10 +273,10 @@ func TestSignup(t *testing.T){
 		mockTokenService := new(mocks.MockTokenService)
 
 		mockUserService.
-			On("Signup", mock.AnythingOfType("*gin.Context"), u).
+			On("Signup", mock.AnythingOfType("*context.emptyCtx"), u).
 			Return(nil)
 		mockTokenService.
-			On("NewPairFromUser", mock.AnythingOfType("*gin.Context"), u, "").
+			On("NewPairFromUser", mock.AnythingOfType("*context.emptyCtx"), u, "").
 			Return(mockTokenResp, nil)
 
 		respRecorder := httptest.NewRecorder()
@@ -263,10 +327,10 @@ func TestSignup(t *testing.T){
 		mockTokenService := new(mocks.MockTokenService)
 
 		mockUserService.
-			On("Signup", mock.AnythingOfType("*gin.Context"), u).
+			On("Signup", mock.AnythingOfType("*context.emptyCtx"), u).
 			Return(nil)
 		mockTokenService.
-			On("NewPairFromUser", mock.AnythingOfType("*gin.Context"), u, "").
+			On("NewPairFromUser", mock.AnythingOfType("*context.emptyCtx"), u, "").
 			Return(nil, mockErrorResponse)
 
 		// a response recorder for getting written http response
